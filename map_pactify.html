@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Interactive Square Map</title>
+    <link rel="stylesheet" href="map_pactify.css">
+</head>
+<body>
+    <div class="container">
+        <h1>Interactive Square Map (±6400 Range)</h1>
+        <div class="map-controls">
+            <div class="map-container">
+                <canvas id="mapCanvas"></canvas>
+            </div>
+            <div class="controls">
+                <h2>Add New Point</h2>
+                <label for="pointX">X Coordinate (-6400 to 6400):</label>
+                <input type="number" id="pointX" min="-6400" max="6400" value="0">
+                <label for="pointY">Y Coordinate (-6400 to 6400):</label>
+                <input type="number" id="pointY" min="-6400" max="6400" value="0">
+                <label for="pointLabel">Label (Optional):</label>
+                <input type="text" id="pointLabel" placeholder="e.g., My Base">
+                <button id="addPointBtn">Add Point</button>
+            </div>
+        </div>
+        <div class="point-list">
+            <h2>Added Points</h2>
+            <ul id="pointsList">
+                </ul>
+        </div>
+    </div>
+
+    <script src="map_pactify.js"></script>
+</body>
+</html>
