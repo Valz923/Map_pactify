@@ -1,3 +1,5 @@
+npm install firebase
+
 document.addEventListener('DOMContentLoaded', () => {
     const canvas = document.getElementById('mapCanvas');
     const ctx = canvas.getContext('2d');
