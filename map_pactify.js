@@ -1,4 +1,32 @@
-npm install firebase
+// Les lignes 'import' sont supprimées car nous utilisons les scripts 'compat' via les balises <script> dans l'HTML.
+// import { initializeApp } from "firebase/app";
+// import { getAnalytics } from "firebase/analytics";
+
+// Votre configuration Firebase (celle que vous avez fournie)
+// C'est la seule et unique déclaration de firebaseConfig
+const firebaseConfig = {
+    apiKey: "AIzaSyC8BXEEFh5o6zVd-mx2z8oED69DWRYzZTc",
+    authDomain: "mappactifyproject.firebaseapp.com",
+    databaseURL: "https://mappactifyproject-default-rtdb.europe-west1.firebasedatabase.app", // C'est parfait, l'URL est correcte
+    projectId: "mappactifyproject",
+    storageBucket: "mappactifyproject.firebasestorage.app",
+    messagingSenderId: "641542909374",
+    appId: "1:641542909374:web:2bf091912be9a661d05def",
+    measurementId: "G-6M2TN1B2KN"
+};
+
+// Initialisation de Firebase (Utilisez cette syntaxe compatible avec les scripts HTML)
+// Une seule initialisation de 'app'
+const app = firebase.initializeApp(firebaseConfig);
+const database = firebase.database(); // Accès à la Realtime Database
+const pointsRef = database.ref('mapPoints'); // Référence à la "collection" de points
+
+// La ligne 'const analytics = getAnalytics(app);' est supprimée car 'getAnalytics'
+// n'est pas disponible avec les scripts 'compat' sans import spécifique.
+// Si vous avez besoin d'Analytics, il faudrait un script additionnel et utiliser firebase.analytics().
+
+// La commande 'npm install firebase' est pour Node.js et n'est pas utilisée ici.
+
 
 document.addEventListener('DOMContentLoaded', () => {
     const canvas = document.getElementById('mapCanvas');
@@ -26,84 +54,80 @@ document.addEventListener('DOMContentLoaded', () => {
     let isDragging = false;
     let lastMouseX, lastMouseY;
 
-    // Array to store our points
-    let points = []; // This will now be loaded from localStorage
+    // Array to store our points (maintenant chargée depuis Firebase)
+    let points = [];
 
-    // --- Persistence Functions ---
+    // --- Fonctions de persistance (maintenant avec Firebase) ---
 
-    // Sauvegarde les points dans localStorage
-    function savePoints() {
-        // Convertit le tableau de points en chaîne JSON et le stocke
-        localStorage.setItem('mapPoints', JSON.stringify(points));
+    // Suppression des fonctions savePoints() et loadPoints() basées sur localStorage,
+    // car Firebase gère la persistance et la synchronisation.
+    // function savePoints() { /* ... */ }
+    // function loadPoints() { /* ... */ }
+
+    // Écouteur Firebase pour charger les points et les mettre à jour en temps réel
+    function setupFirebaseListener() {
+        pointsRef.on('value', (snapshot) => {
+            // 'value' est déclenché une fois au début et à chaque changement de données
+            const data = snapshot.val(); // Récupère toutes les données sous 'mapPoints'
+            points = []; // Vide le tableau local
+
+            if (data) {
+                // Firebase renvoie un objet d'objets, pas un tableau direct.
+                // Nous devons le convertir en tableau. Les clés sont les IDs uniques générés par Firebase.
+                for (let key in data) {
+                    // Chaque point dans Firebase aura un ID unique (key)
+                    // que nous stockons avec le point pour la suppression.
+                    points.push({ firebaseId: key, ...data[key] });
+                }
+            }
+            renderPointsList(); // Met à jour la liste HTML
+            drawMap();          // Redessine la carte
+        }, (error) => {
+            console.error("Erreur de lecture Firebase :", error);
+        });
     }
 
-    // Charge les points depuis localStorage
-    function loadPoints() {
-        const storedPoints = localStorage.getItem('mapPoints');
-        if (storedPoints) {
-            // Parse la chaîne JSON pour la convertir en tableau d'objets
-            points = JSON.parse(storedPoints);
-        } else {
-            points = []; // Si rien n'est stocké, initialise un tableau vide
-        }
-    }
 
-    // --- Coordinate Transformation Functions (updated for zoom/pan) ---
+    // --- Coordinate Transformation Functions (inchangées) ---
 
     // Converts a real-world X coordinate to a canvas pixel X coordinate
     function worldToCanvasX(worldX) {
-        // Normalize the world coordinate (0 to 1)
         const normalizedX = (worldX - MIN_COORD) / MAP_RANGE;
-        // Scale to canvas size and apply zoom and pan
         return (normalizedX * CANVAS_SIZE * scale) + offsetX;
     }
 
     // Converts a real-world Y coordinate to a canvas pixel Y coordinate
     function worldToCanvasY(worldY) {
-        // Normalize the world coordinate (0 to 1)
         const normalizedY = (worldY - MIN_COORD) / MAP_RANGE;
-        // Invert Y for canvas (canvas Y increases downwards, world Y increases upwards)
-        // Apply scale and pan
         return (CANVAS_SIZE - (normalizedY * CANVAS_SIZE)) * scale + offsetY;
     }
 
     // Converts a canvas pixel X coordinate to a real-world X coordinate
     function canvasToWorldX(canvasX) {
-        // Reverse pan and scale
         const scaledX = (canvasX - offsetX) / scale;
-        // Reverse canvas scaling and normalization
         return (scaledX / CANVAS_SIZE) * MAP_RANGE + MIN_COORD;
     }
 
     // Converts a canvas pixel Y coordinate to a real-world Y coordinate
     function canvasToWorldY(canvasY) {
-        // Reverse pan and scale
         const scaledY = (canvasY - offsetY) / scale;
-        // Reverse canvas Y inversion and scaling/normalization
         return MAX_COORD - (scaledY / CANVAS_SIZE) * MAP_RANGE;
     }
 
-    // --- Drawing Functions ---
+    // --- Drawing Functions (inchangées) ---
 
     function drawMap() {
-        // Clear the canvas
         ctx.clearRect(0, 0, CANVAS_SIZE, CANVAS_SIZE);
-
-        // Save current transformation state
         ctx.save();
-
-        // Draw background before transformation
         ctx.fillStyle = '#f9f9f9';
         ctx.fillRect(0, 0, CANVAS_SIZE, CANVAS_SIZE);
 
-
-        // --- Draw Grid (optional, helps with navigation) ---
         ctx.strokeStyle = '#e0e0e0';
         ctx.lineWidth = 0.5;
-        const gridStep = 1000; // Draw grid lines every 1000 units
+        const gridStep = 1000;
         for (let x = MIN_COORD; x <= MAX_COORD; x += gridStep) {
             const canvasX = worldToCanvasX(x);
-            if (canvasX >= -CANVAS_SIZE * 2 && canvasX <= CANVAS_SIZE * 2) { // Only draw if roughly in view
+            if (canvasX >= -CANVAS_SIZE * 2 && canvasX <= CANVAS_SIZE * 2) {
                 ctx.beginPath();
                 ctx.moveTo(canvasX, worldToCanvasY(MIN_COORD));
                 ctx.lineTo(canvasX, worldToCanvasY(MAX_COORD));
@@ -112,7 +136,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }
         for (let y = MIN_COORD; y <= MAX_COORD; y += gridStep) {
             const canvasY = worldToCanvasY(y);
-            if (canvasY >= -CANVAS_SIZE * 2 && canvasY <= CANVAS_SIZE * 2) { // Only draw if roughly in view
+            if (canvasY >= -CANVAS_SIZE * 2 && canvasY <= CANVAS_SIZE * 2) {
                 ctx.beginPath();
                 ctx.moveTo(worldToCanvasX(MIN_COORD), canvasY);
                 ctx.lineTo(worldToCanvasX(MAX_COORD), canvasY);
@@ -120,12 +144,8 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         }
 
-
-        // Draw axes (center lines)
         ctx.strokeStyle = '#aaa';
         ctx.lineWidth = 1;
-
-        // X-axis (line at Y=0)
         const centerY_world = 0;
         const centerY_canvas = worldToCanvasY(centerY_world);
         ctx.beginPath();
@@ -133,7 +153,6 @@ document.addEventListener('DOMContentLoaded', () => {
         ctx.lineTo(worldToCanvasX(MAX_COORD), centerY_canvas);
         ctx.stroke();
 
-        // Y-axis (line at X=0)
         const centerX_world = 0;
         const centerX_canvas = worldToCanvasX(centerX_world);
         ctx.beginPath();
@@ -141,13 +160,9 @@ document.addEventListener('DOMContentLoaded', () => {
         ctx.lineTo(centerX_canvas, worldToCanvasY(MAX_COORD));
         ctx.stroke();
 
-
-        // Draw points
         points.forEach(point => {
             drawPoint(point.x, point.y, point.label);
         });
-
-        // Restore context (important if you apply global transforms that you don't want to affect subsequent draws)
         ctx.restore();
     }
 
@@ -155,16 +170,13 @@ document.addEventListener('DOMContentLoaded', () => {
         const canvasX = worldToCanvasX(worldX);
         const canvasY = worldToCanvasY(worldY);
 
-        // Only draw points if they are roughly visible on the canvas
         if (canvasX < -10 || canvasX > CANVAS_SIZE + 10 || canvasY < -10 || canvasY > CANVAS_SIZE + 10) {
-            return; // Point is out of view
+            return;
         }
 
-        // Make point size scale directly with zoom, with a minimum and maximum.
-        const basePointRadius = 3; // The desired size at scale 1.0
-        const minPointRadius = 2; // Minimum size to ensure visibility when very zoomed out
-        const maxPointRadius = 15; // Maximum size to prevent points from becoming too large when very zoomed in
-
+        const basePointRadius = 3;
+        const minPointRadius = 2;
+        const maxPointRadius = 15;
         const pointRadius = Math.min(maxPointRadius, Math.max(minPointRadius, basePointRadius * scale));
 
         ctx.fillStyle = 'red';
@@ -172,44 +184,42 @@ document.addEventListener('DOMContentLoaded', () => {
         ctx.arc(canvasX, canvasY, pointRadius, 0, Math.PI * 2);
         ctx.fill();
 
-        // Draw label (only if zoomed in enough or if point is large enough)
-        if (label && scale > 0.5) { // Only show labels when sufficiently zoomed in
-            // Adjust font size with zoom, but also clamp it for readability
+        if (label && scale > 0.5) {
             const labelFontSize = Math.min(20, Math.max(10, 12 * scale));
             ctx.fillStyle = 'black';
             ctx.font = `${labelFontSize}px Arial`;
             ctx.textAlign = 'center';
             ctx.textBaseline = 'bottom';
-            // Offset adjusts with pointRadius to stay above the circle
             ctx.fillText(label, canvasX, canvasY - (pointRadius + 5));
         }
     }
 
-    // --- Point Management Functions ---
+    // --- Point Management Functions (modifiées pour Firebase) ---
 
     function addPoint(x, y, label = '') {
-        // Basic validation
         if (isNaN(x) || isNaN(y) || x < MIN_COORD || x > MAX_COORD || y < MIN_COORD || y > MAX_COORD) {
             alert(`Please enter valid coordinates within the range ${MIN_COORD} to ${MAX_COORD}.`);
             return;
         }
-
-        const newPoint = { x: x, y: y, label: label };
-        points.push(newPoint);
-        savePoints(); // Sauvegarde après ajout
-        renderPointsList();
-        drawMap(); // Redraw map with the new point
+        const newPointData = { x: x, y: y, label: label, timestamp: firebase.database.ServerValue.TIMESTAMP };
+        // Ajoute un nouveau point à la base de données. Firebase génère un ID unique.
+        pointsRef.push(newPointData)
+            .then(() => { console.log("Point ajouté à Firebase !"); })
+            .catch(error => { console.error("Erreur lors de l'ajout du point à Firebase :", error); });
     }
 
     function removePoint(index) {
-        points.splice(index, 1); // Remove 1 element at the given index
-        savePoints(); // Sauvegarde après suppression
-        renderPointsList();
-        drawMap(); // Redraw map without the removed point
+        // Nous avons besoin de l'ID Firebase du point pour le supprimer
+        const pointToRemove = points[index];
+        if (pointToRemove && pointToRemove.firebaseId) {
+            pointsRef.child(pointToRemove.firebaseId).remove()
+                .then(() => { console.log("Point supprimé de Firebase !"); })
+                .catch(error => { console.error("Erreur lors de la suppression du point de Firebase :", error); });
+        }
     }
 
     function renderPointsList() {
-        pointsList.innerHTML = ''; // Clear existing list
+        pointsList.innerHTML = '';
         points.forEach((point, index) => {
             const listItem = document.createElement('li');
             const labelText = point.label ? ` (${point.label})` : '';
@@ -220,7 +230,6 @@ document.addEventListener('DOMContentLoaded', () => {
             pointsList.appendChild(listItem);
         });
 
-        // Add event listeners to the new "Remove" buttons
         pointsList.querySelectorAll('button').forEach(button => {
             button.addEventListener('click', (event) => {
                 const indexToRemove = parseInt(event.target.dataset.index);
@@ -229,22 +238,17 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
-    // --- Event Listeners ---
-
+    // --- Event Listeners (inchangés) ---
     addPointBtn.addEventListener('click', () => {
         const x = parseFloat(pointXInput.value);
         const y = parseFloat(pointYInput.value);
         const label = pointLabelInput.value.trim();
-
         addPoint(x, y, label);
-
-        // Clear input fields after adding
         pointXInput.value = '0';
         pointYInput.value = '0';
         pointLabelInput.value = '';
     });
 
-    // --- Mouse Events for Panning ---
     canvas.addEventListener('mousedown', (e) => {
         isDragging = true;
         lastMouseX = e.clientX;
@@ -275,31 +279,24 @@ document.addEventListener('DOMContentLoaded', () => {
         canvas.style.cursor = 'grab';
     });
 
-    // --- Mouse Wheel for Zooming ---
     canvas.addEventListener('wheel', (e) => {
-        e.preventDefault(); // Prevent page scrolling
+        e.preventDefault();
 
-        const zoomFactor = 1.1; // How much to zoom in/out
+        const zoomFactor = 1.1;
         const mouseX = e.clientX - canvas.getBoundingClientRect().left;
         const mouseY = e.clientY - canvas.getBoundingClientRect().top;
 
-        // Calculate world coordinates at mouse position before zoom
         const worldXAtMouse = canvasToWorldX(mouseX);
         const worldYAtMouse = canvasToWorldY(mouseY);
 
         if (e.deltaY < 0) {
-            // Zoom in
             scale *= zoomFactor;
         } else {
-            // Zoom out
             scale /= zoomFactor;
         }
 
-        // Clamp scale to prevent too much zoom in/out
-        scale = Math.max(0.1, Math.min(10, scale)); // Min 0.1x, Max 10x zoom
+        scale = Math.max(0.1, Math.min(10, scale));
 
-        // Recalculate offsets to keep mouse position fixed on world coordinate
-        // This is the "zoom to mouse" logic
         offsetX = mouseX - (worldToCanvasX(worldXAtMouse) - offsetX);
         offsetY = mouseY - (worldToCanvasY(worldYAtMouse) - offsetY);
 
@@ -307,8 +304,10 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     // --- Initialisation ---
-    loadPoints(); // Charge les points au démarrage
-    renderPointsList(); // Affiche les points chargés dans la liste
-    drawMap(); // Dessine la carte avec les points chargés
-    canvas.style.cursor = 'grab'; // Set initial cursor style
+    setupFirebaseListener(); // Démarre l'écoute des points depuis Firebase
+    // Les lignes 'loadPoints()' et 'renderPointsList()' ici sont supprimées car setupFirebaseListener() les gère.
+    // loadPoints();
+    // renderPointsList();
+    // drawMap(); // La carte est dessinée par setupFirebaseListener() après chargement des points
+    canvas.style.cursor = 'grab';
 });
